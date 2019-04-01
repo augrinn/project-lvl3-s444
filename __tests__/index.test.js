@@ -4,7 +4,7 @@ import os from 'os';
 import axios from 'axios';
 import httpAdapter from 'axios/lib/adapters/http';
 import nock from 'nock';
-import savePage from '../src/';
+import savePage from '../src';
 
 const host = 'http://test.ru';
 
@@ -16,7 +16,7 @@ it('Download page', async () => {
   nock(host)
     .get('/')
     .reply(200, testData);
-    
+
   const testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test'));
   await savePage(host, testDir);
   const testFilename = 'test-ru.html';

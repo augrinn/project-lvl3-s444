@@ -7,5 +7,5 @@ export default (pageURL, outputDir) => {
   const fullFileName = path.resolve(outputDir, fileName);
   console.log(fullFileName);
   return axios.get(pageURL)
-    .then((response) => fs.writeFile(fullFileName, response.data));
+    .then(response => fs.writeFile(fullFileName, response.data));
 };
