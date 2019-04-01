@@ -3,7 +3,10 @@
   "version": "0.0.1",
   "description": "Downloads the page and saves it locally",
   "main": "dist/index.js",
-  "dependencies": {},
+  "dependencies": {
+    "axios": "^0.18.0",
+    "commander": "^2.19.0"
+  },
   "devDependencies": {
     "@babel/cli": "^7.2.3",
     "@babel/core": "^7.4.0",
@@ -17,10 +20,12 @@
     "eslint-plugin-import": "^2.16.0",
     "eslint-plugin-jest": "^22.4.1",
     "jest": "^24.5.0",
-    "jest-cli": "^24.5.0"
+    "jest-cli": "^24.5.0",
+    "nock": "^10.0.6"
   },
   "scripts": {
     "test": "jest",
+    "babel-node": "babel-node",
     "build": "NODE_ENV=production babel src --out-dir dist --source-maps inline",
     "prepublishOnly": "npm run build"
   },
