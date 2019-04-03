@@ -3,7 +3,10 @@ import axios from 'axios';
 import url from 'url';
 import cheerio from 'cheerio';
 import _ from 'lodash';
+import debug from 'debug';
 import { promises as fs } from 'fs';
+
+const log = debug('page-loader');
 
 const assetsTag = {
   link: 'href',
@@ -38,6 +41,7 @@ const saveAssets = (assetsNode, pageURL, dirName) => {
         const assetHref = element.attribs[assetsTag[element.tagName]];
         const savePath = path.join(dirName, getFileNameToSave(assetHref));
         const assetUrl = url.resolve(pageURL, assetHref);
+        log(`asset ${assetUrl} saved as ${savePath}`);
         return axios({
           method: 'get',
           url: assetUrl,
@@ -68,6 +72,8 @@ const saveAssetsNodeAndModifyHtml = (html, pageURL, dirName, fullDirName) => {
 };
 
 export default (pageURL, outputDir) => {
+  log(`page URL: ${pageURL}`);
+  log(`output dir: ${outputDir}`);
   const { host: hostUrl, path: pathURL } = url.parse(pageURL);
   const nameToSave = getNameToSave(`${hostUrl}${pathURL}`);
   const fileName = path.resolve(outputDir, nameToSave.concat('.html'));
