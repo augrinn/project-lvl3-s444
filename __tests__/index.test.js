@@ -70,9 +70,5 @@ it('404', async () => {
     .get('/wrongUrl')
     .reply(404);
 
-  try {
-    await savePage(`${host}/wrongUrl`, testDir);
-  } catch (e) {
-    expect(e.message).toMatch('404');
-  }
+  await expect(savePage(`${host}/wrongUrl`, testDir)).rejects.toThrow('404');
 });
