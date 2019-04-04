@@ -41,13 +41,13 @@ const saveAssets = (assetsNode, pageURL, dirName) => {
         const assetHref = element.attribs[assetsTag[element.tagName]];
         const savePath = path.join(dirName, getFileNameToSave(assetHref));
         const assetUrl = url.resolve(pageURL, assetHref);
-        log(`asset ${assetUrl} saved as ${savePath}`);
         return axios({
           method: 'get',
           url: assetUrl,
           responseType: 'arraybuffer',
         })
-          .then(response => fs.writeFile(savePath, response.data));
+          .then(response => fs.writeFile(savePath, response.data))
+          .then(() => log(`asset ${assetUrl} saved as ${savePath}`));
       });
       return Promise.all(promises);
     });
@@ -79,7 +79,8 @@ export default (pageURL, outputDir) => {
   const fileName = path.resolve(outputDir, nameToSave.concat('.html'));
   const dirName = nameToSave.concat('_files');
   const fullDirName = path.resolve(outputDir, dirName);
-  return axios.get(pageURL)
+  return fs.access(outputDir)
+    .then(() => axios.get(pageURL))
     .then(response => saveAssetsNodeAndModifyHtml(response.data, pageURL, dirName, fullDirName))
     .then(html => fs.writeFile(fileName, html));
 };

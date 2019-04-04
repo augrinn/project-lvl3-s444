@@ -19,6 +19,7 @@ beforeEach(async () => {
   testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test'));
   filePath = path.join(testDir, testFilename);
   dirAssetsPath = path.join(testDir, dirAssetsName);
+  nock.cleanAll();
 });
 
 it('Download page without assets', async () => {
@@ -71,4 +72,29 @@ it('404', async () => {
     .reply(404);
 
   await expect(savePage(`${host}/wrongUrl`, testDir)).rejects.toThrow('404');
+});
+
+it('Wrong dir', async () => {
+  nock(host)
+    .get('/test')
+    .reply(200);
+
+  await expect(savePage(`${host}/test`, 'WrongDir')).rejects.toThrow('no such file or directory');
+});
+
+it('Download assets fail', async () => {
+  const pageHtml = await fs.readFile(path.join(__dirname, '__fixtures__/pageWithAssets.html'), 'utf8');
+  const filePathStyle = path.join(__dirname, '__fixtures__/assets/style.css');
+  const filePathimage = path.join(__dirname, '__fixtures__/assets/image.png');
+  nock(host)
+    .get('/test')
+    .reply(200, pageHtml)
+    .get('/assets/style.css')
+    .replyWithFile(200, filePathStyle)
+    .get('/assets/script.js')
+    .replyWithFile(404, filePathStyle)
+    .get('/assets/image.png')
+    .replyWithFile(200, filePathimage);
+
+  await expect(savePage(`${host}/test`, testDir)).rejects.toThrow('404');
 });
