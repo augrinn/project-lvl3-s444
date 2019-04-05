@@ -4,6 +4,7 @@ import url from 'url';
 import cheerio from 'cheerio';
 import _ from 'lodash';
 import debug from 'debug';
+import Listr from 'listr';
 import { promises as fs } from 'fs';
 
 const log = debug('page-loader');
@@ -30,46 +31,45 @@ const getFileNameToSave = (name) => {
   return getNameToSave(nameWithourExt).concat(ext);
 };
 
-const saveAssets = (assetsNode, pageURL, dirName) => {
-  if (assetsNode.length === 0) {
-    return Promise.resolve(true);
-  }
-  return fs.access(dirName)
-    .catch(() => fs.mkdir(dirName))
-    .then(() => {
-      const promises = assetsNode.map((element) => {
-        const assetHref = element.attribs[assetsTag[element.tagName]];
-        const savePath = path.join(dirName, getFileNameToSave(assetHref));
-        const assetUrl = url.resolve(pageURL, assetHref);
-        return axios({
-          method: 'get',
-          url: assetUrl,
-          responseType: 'arraybuffer',
-        })
-          .then(response => fs.writeFile(savePath, response.data))
-          .then(() => log(`asset ${assetUrl} saved as ${savePath}`));
-      });
-      return Promise.all(promises);
-    });
-};
+const getTasksAssetsSave = (assetsNode, pageURL, dirName) => new Listr(assetsNode.map((element) => {
+  const assetHref = element.attribs[assetsTag[element.tagName]];
+  const savePath = path.join(dirName, getFileNameToSave(assetHref));
+  const assetUrl = url.resolve(pageURL, assetHref);
+  return {
+    title: `Saving asset ${assetUrl} as ${savePath}`,
+    task: () => axios({
+      method: 'get',
+      url: assetUrl,
+      responseType: 'arraybuffer',
+    })
+      .then(response => fs.writeFile(savePath, response.data))
+      .then(() => log(`asset ${assetUrl} saved as ${savePath}`))
+      .catch(() => {
+        const errorMessage = `error loading asset ${assetUrl}`;
+        log(errorMessage);
+        throw new Error(errorMessage);
+      }),
+  };
+}), { concurrent: true });
 
-const saveAssetsNodeAndModifyHtml = (html, pageURL, dirName, fullDirName) => {
-  const $ = cheerio.load(html);
-  const assetsNode = _.uniq(Object.keys(assetsTag).reduce((acc, key) => {
-    const filtered = $(key).filter((i, el) => {
-      const attrName = assetsTag[key];
-      return $(el).attr(attrName) && isLocalAsset($(el).attr(attrName));
-    });
-    return [...acc, ...filtered.get()];
-  }, []));
-  return saveAssets(assetsNode, pageURL, fullDirName)
-    .then(() => assetsNode.forEach((element) => {
-      const oldValue = $(element).attr(assetsTag[element.tagName]);
-      const newValue = path.join(dirName, getFileNameToSave(oldValue));
-      $(element).attr(assetsTag[element.tagName], newValue);
-    }))
-    .then(() => $.html());
-};
+const getAssetsNode = $ => _.uniq(Object.keys(assetsTag).reduce((acc, key) => {
+  const filtered = $(key).filter((i, el) => {
+    const attrName = assetsTag[key];
+    return $(el).attr(attrName) && isLocalAsset($(el).attr(attrName));
+  });
+  return [...acc, ...filtered.get()];
+}, []));
+
+const getTasksReplaceAssetsURL = ($, assetsNode, dirName) => new Listr(assetsNode.map((element) => {
+  const oldValue = $(element).attr(assetsTag[element.tagName]);
+  const newValue = path.join(dirName, getFileNameToSave(oldValue));
+  return {
+    title: `Replase ${oldValue} of ${newValue}`,
+    task: () => $(element).attr(assetsTag[element.tagName], newValue),
+  };
+}));
+
+const haveAssets = assetsNode => assetsNode && assetsNode.length !== 0;
 
 export default (pageURL, outputDir) => {
   log(`page URL: ${pageURL}`);
@@ -79,8 +79,57 @@ export default (pageURL, outputDir) => {
   const fileName = path.resolve(outputDir, nameToSave.concat('.html'));
   const dirName = nameToSave.concat('_files');
   const fullDirName = path.resolve(outputDir, dirName);
-  return fs.access(outputDir)
-    .then(() => axios.get(pageURL))
-    .then(response => saveAssetsNodeAndModifyHtml(response.data, pageURL, dirName, fullDirName))
-    .then(html => fs.writeFile(fileName, html));
+  log(`fullDirName: ${fullDirName}`);
+  const tasks = new Listr([
+    {
+      title: 'Access output dir',
+      task: ctx => fs
+        .access(outputDir)
+        .then(() => {
+          ctx.dirExists = true;
+          return Promise.resolve(true);
+        }),
+    },
+    {
+      title: 'Get page',
+      enabled: ctx => ctx.dirExists,
+      task: ctx => axios
+        .get(pageURL)
+        .then((response) => {
+          ctx.$ = cheerio.load(response.data);
+          return Promise.resolve(true);
+        }),
+    },
+    {
+      title: 'Get assets node',
+      enabled: ctx => ctx.$,
+      task: (ctx) => {
+        ctx.assetsNode = getAssetsNode(ctx.$);
+        return Promise.resolve(true);
+      },
+    },
+    {
+      title: 'Create directory to save assets',
+      enabled: ctx => haveAssets(ctx.assetsNode),
+      task: () => fs.access(fullDirName)
+        .catch(() => fs.mkdir(fullDirName))
+        .then(() => 'Directory exists'),
+    },
+    {
+      title: 'Save assets',
+      enabled: ctx => haveAssets(ctx.assetsNode),
+      task: ctx => getTasksAssetsSave(ctx.assetsNode, pageURL, fullDirName),
+    },
+    {
+      title: 'Replace assets URL',
+      enabled: ctx => haveAssets(ctx.assetsNode),
+      task: ctx => getTasksReplaceAssetsURL(ctx.$, ctx.assetsNode, dirName),
+    },
+    {
+      title: 'Save page',
+      enabled: ctx => ctx.dirExists && ctx.$,
+      task: ctx => fs.writeFile(fileName, ctx.$.html()),
+    },
+  ]);
+  return tasks.run();
 };

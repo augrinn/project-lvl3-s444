@@ -96,5 +96,5 @@ it('Download assets fail', async () => {
     .get('/assets/image.png')
     .replyWithFile(200, filePathimage);
 
-  await expect(savePage(`${host}/test`, testDir)).rejects.toThrow('404');
+  await expect(savePage(`${host}/test`, testDir)).rejects.toThrow('error loading asset');
 });
